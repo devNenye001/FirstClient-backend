@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CopyField {
+  PHONE
+  EMAIL
+}
+
+enum ActivityType {
+  SEARCH
+  BUSINESS_VIEW
+  BUSINESS_SAVE
+  BUSINESS_UNSAVE
+  PHONE_COPY
+  EMAIL_COPY
+  RECOMMENDATION
+}
+
+model User {
+  id                 String            @id @default(cuid())
+  name               String?
+  email              String            @unique
+  passwordHash       String
+  refreshTokenHash   String?
+  resetTokenHash     String?
+  resetTokenExpiresAt DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  savedBusinesses    SavedBusiness[]
+  searchHistory      SearchHistory[]
+  copyEvents         CopyEvent[]
+  viewedBusinesses   BusinessView[]
+  activities         Activity[]
+  recommendations    Recommendation[]
+
+  @@index([createdAt])
+}
+
+model Business {
+  id              String           @id @default(cuid())
+  googlePlaceId   String           @unique
+  name            String
+  category        String
+  address         String
+  phone           String?
+  email           String?
+  website         String?
+  websiteExists   Boolean          @default(false)
+  googleRating    Float?
+  reviewCount     Int?
+  openingHours    Json?
+  photos          String[]
+  googleMapsUrl   String
+  latitude        Float
+  longitude       Float
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  savedBy         SavedBusiness[]
+  copyEvents      CopyEvent[]
+  views           BusinessView[]
+  recommendations Recommendation[]
+
+  @@index([category])
+  @@index([latitude, longitude])
+  @@index([websiteExists])
+}
+
+model SavedBusiness {
+  id         String   @id @default(cuid())
+  userId     String
+  businessId String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@index([userId])
+}
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  country   String
+  state     String?
+  city      String
+  category  String
+  resultCount Int    @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([country, city, category])
+}
+
+model CopyEvent {
+  id         String    @id @default(cuid())
+  userId     String
+  businessId String
+  copiedField CopyField
+  createdAt  DateTime @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([businessId])
+}
+
+model BusinessView {
+  id         String   @id @default(cuid())
+  userId     String
+  businessId String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([businessId])
+}
+
+model Recommendation {
+  id               String   @id @default(cuid())
+  userId           String?
+  businessId       String
+  service          String
+  reason           String
+  opportunityScore Int
+  model            String
+  createdAt        DateTime @default(now())
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  business         Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([userId])
+}
+
+model Activity {
+  id         String       @id @default(cuid())
+  userId     String
+  type       ActivityType
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
