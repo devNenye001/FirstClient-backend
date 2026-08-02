@@ -4,3 +4,7 @@ dist/
 .env.*
 !.env.example
 npm-debug.log*
+dev.db
+dev.db-journal
+*.db
+

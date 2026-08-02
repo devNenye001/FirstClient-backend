@@ -13,6 +13,7 @@ import { dashboardRoutes } from './features/dashboard/dashboard.routes.js'
 import { recommendationRoutes } from './features/recommendations/recommendation.routes.js'
 import { savedRoutes } from './features/saved/saved.routes.js'
 import { searchRoutes } from './features/search/search.routes.js'
+import { userRoutes } from './features/users/user.routes.js'
 
 export const app = express()
 
@@ -27,6 +28,7 @@ app.get('/health', (_req, res) => res.json({ success: true, message: 'FirstClien
 app.use('/auth', authRoutes)
 app.use('/dashboard', dashboardRoutes)
 app.use('/search', searchRoutes)
+app.use('/users', userRoutes)
 app.use(businessRoutes)
 app.use('/saved', savedRoutes)
 app.use('/analytics', analyticsRoutes)

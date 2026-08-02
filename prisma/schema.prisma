@@ -3,24 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-enum CopyField {
-  PHONE
-  EMAIL
-}
 
-enum ActivityType {
-  SEARCH
-  BUSINESS_VIEW
-  BUSINESS_SAVE
-  BUSINESS_UNSAVE
-  PHONE_COPY
-  EMAIL_COPY
-  RECOMMENDATION
-}
 
 model User {
   id                 String            @id @default(cuid())
@@ -55,7 +42,7 @@ model Business {
   googleRating    Float?
   reviewCount     Int?
   openingHours    Json?
-  photos          String[]
+  photos          Json
   googleMapsUrl   String
   latitude        Float
   longitude       Float
@@ -102,7 +89,7 @@ model CopyEvent {
   id         String    @id @default(cuid())
   userId     String
   businessId String
-  copiedField CopyField
+  copiedField String
   createdAt  DateTime @default(now())
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -142,7 +129,7 @@ model Recommendation {
 model Activity {
   id         String       @id @default(cuid())
   userId     String
-  type       ActivityType
+  type       String
   metadata   Json?
   createdAt  DateTime     @default(now())
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
