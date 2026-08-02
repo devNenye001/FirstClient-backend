@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 
 export type BusinessInput = {
@@ -11,7 +12,7 @@ export type BusinessInput = {
   websiteExists: boolean
   googleRating?: number
   reviewCount?: number
-  openingHours?: unknown
+  openingHours?: Prisma.InputJsonValue
   photos: string[]
   googleMapsUrl: string
   latitude: number

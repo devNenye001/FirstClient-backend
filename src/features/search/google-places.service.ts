@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { env } from '../../config/env.js'
 import type { BusinessInput } from '../businesses/business.repository.js'
 
@@ -10,7 +11,7 @@ type Details = {
   website?: string
   rating?: number
   user_ratings_total?: number
-  opening_hours?: unknown
+  opening_hours?: Prisma.InputJsonValue
   photos?: { photo_reference: string }[]
   url?: string
   geometry: { location: { lat: number; lng: number } }

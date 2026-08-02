@@ -1,8 +1,8 @@
-import type { ActivityType, CopyField } from '@prisma/client'
+import type { ActivityType, CopyField, Prisma } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 
 export class AnalyticsService {
-  static async activity(userId: string, type: ActivityType, metadata?: Record<string, unknown>) {
+  static async activity(userId: string, type: ActivityType, metadata?: Prisma.InputJsonValue) {
     return prisma.activity.create({ data: { userId, type, metadata } })
   }
 
