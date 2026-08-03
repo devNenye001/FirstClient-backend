@@ -1,4 +1,6 @@
 import { env } from '../../config/env.js'
+import { SearchError } from '../../utils/http.js'
+
 
 type SearchInput = { country: string; state?: string; city?: string; category?: string }
 
@@ -116,6 +118,7 @@ export class OverpassService {
   static async geocode(input: SearchInput) {
     const cacheKey = `${input.country}:${input.state || ''}:${input.city || ''}`.toLowerCase()
     if (this.geocodeCache.has(cacheKey)) {
+      console.log('Using cached coordinates for:', cacheKey)
       return this.geocodeCache.get(cacheKey)!
     }
 
@@ -127,30 +130,121 @@ export class OverpassService {
     if (input.country) params.set('country', input.country)
 
     const url = `${env.NOMINATIM_URL}?${params.toString()}`
-    const res = await fetch(url, { headers: { 'User-Agent': env.NOMINATIM_USER_AGENT } })
-    if (!res.ok) throw new Error(`Nominatim geocode failed: ${res.status}`)
-    const data = await res.json()
-    if (!data || data.length === 0) {
-      throw new Error(`Location not found: ${input.city}, ${input.country}`)
+    
+    console.log('\nIncoming Request\n↓\nReceived Query Parameters:', input)
+    console.log('↓\nCalling Nominatim')
+    console.log('URL:', url)
+
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': env.NOMINATIM_USER_AGENT } })
+      console.log('Nominatim Response')
+      console.log('Status Code:', res.status)
+      
+      const bodyText = await res.text()
+      console.log('Response Body:', bodyText)
+
+      if (!res.ok) {
+        throw new SearchError(
+          'Calling Nominatim',
+          `Nominatim HTTP error: ${res.status}`,
+          bodyText
+        )
+      }
+
+      let data
+      try {
+        data = JSON.parse(bodyText)
+      } catch (e: any) {
+        throw new SearchError(
+          'Calling Nominatim',
+          'Failed to parse Nominatim response as JSON',
+          bodyText
+        )
+      }
+
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new SearchError(
+          'Calling Nominatim',
+          `Location not found: ${input.city}, ${input.country}`,
+          bodyText
+        )
+      }
+
+      const coords = { lat: Number(data[0].lat), lon: Number(data[0].lon) }
+      this.geocodeCache.set(cacheKey, coords)
+      return coords
+    } catch (err: any) {
+      if (err instanceof SearchError) throw err
+      throw new SearchError('Calling Nominatim', err.message, err.stack)
     }
-    const coords = { lat: Number(data[0].lat), lon: Number(data[0].lon) }
-    this.geocodeCache.set(cacheKey, coords)
-    return coords
   }
 
   static async queryOverpass(lat: number, lon: number, category?: string) {
-    const query = buildOverpassQuery(lat, lon, 15000, category)
+    const query = buildOverpassQuery(lat, lon, 5000, category)
+    console.log('↓\nGenerated Overpass Query:')
+    console.log(query)
+
     const body = new URLSearchParams({ data: query })
-    const res = await fetch(env.OVERPASS_URL, { method: 'POST', body: body.toString(), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
-    if (!res.ok) throw new Error(`Overpass query failed: ${res.status}`)
-    const json = await res.json()
-    return json.elements || []
+    const requestBody = body.toString()
+    console.log('↓\nCalling Overpass API')
+    console.log('URL:', env.OVERPASS_URL)
+    console.log('Request Body:', requestBody)
+
+    try {
+      const res = await fetch(env.OVERPASS_URL, {
+        method: 'POST',
+        body: requestBody,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': env.NOMINATIM_USER_AGENT
+        }
+      })
+
+      console.log('Overpass Response')
+      console.log('Status Code:', res.status)
+
+      const bodyText = await res.text()
+      console.log('Response Body Snippet:', bodyText.substring(0, 1000))
+
+      if (!res.ok) {
+        throw new SearchError(
+          'Calling Overpass API',
+          `Overpass query failed with HTTP status ${res.status}`,
+          bodyText
+        )
+      }
+
+      let json
+      try {
+        json = JSON.parse(bodyText)
+      } catch (e: any) {
+        throw new SearchError(
+          'Calling Overpass API',
+          'Failed to parse Overpass response as JSON',
+          bodyText
+        )
+      }
+
+      return json.elements || []
+    } catch (err: any) {
+      if (err instanceof SearchError) throw err
+      throw new SearchError('Calling Overpass API', err.message, err.stack)
+    }
   }
 
   static async search(input: SearchInput) {
+    console.log('↓\nValidating parameters')
+    if (!input.city || !input.country || !input.category) {
+      throw new SearchError(
+        'Validation',
+        'Missing query parameters: city, country, and category are required'
+      )
+    }
+
     const { lat, lon } = await this.geocode(input)
     const elements = await this.queryOverpass(lat, lon, input.category)
 
+    console.log('↓\nNormalizing Data')
     const results = elements
       .map((el: any) => {
         const tags = el.tags || {}
@@ -160,7 +254,7 @@ export class OverpassService {
           category: tags.amenity || tags.shop || tags.tourism || tags.leisure || tags.office || tags.beauty || 'Unknown',
           address: [tags['addr:housenumber'], tags['addr:street'], tags['addr:city'], tags['addr:postcode']]
             .filter(Boolean)
-            .join(' '),
+            .join(' ') || 'Address not listed',
           phone: tags.phone || tags['contact:phone'] || undefined,
           email: tags.email || tags['contact:email'] || undefined,
           website: tags.website || tags['contact:website'] || undefined,
@@ -175,7 +269,10 @@ export class OverpassService {
         }
       })
       .filter((b: any) => b.name && b.latitude && b.longitude)
+      .slice(0, 50)
 
+    console.log(`↓\nNormalized ${results.length} results (capped at 50)`)
+    console.log('↓\nReturning Response')
     return { lat, lon, results }
   }
 }

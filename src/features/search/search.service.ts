@@ -2,7 +2,7 @@ import { prisma } from '../../config/prisma.js'
 import { AnalyticsService } from '../analytics/analytics.service.js'
 import { BusinessRepository, type BusinessInput } from '../businesses/business.repository.js'
 import { OverpassService } from './overpass.service.js'
-import { HttpError } from '../../utils/http.js'
+import { HttpError, SearchError } from '../../utils/http.js'
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371 // Radius of the earth in km
@@ -19,7 +19,11 @@ export class SearchService {
   static async search(userId: string, input: { country: string; state?: string; city: string; category: string }) {
     try {
       const { lat, lon, results } = await OverpassService.search(input)
-      const businesses = await Promise.all(results.map((business: BusinessInput) => BusinessRepository.upsert(business)))
+      const businesses = []
+      for (const business of results) {
+        const upserted = await BusinessRepository.upsert(business as BusinessInput)
+        businesses.push(upserted)
+      }
 
       await prisma.searchHistory.create({ data: { userId, ...input, resultCount: businesses.length } })
       await AnalyticsService.activity(userId, 'SEARCH', { ...input, resultCount: businesses.length })
@@ -34,6 +38,9 @@ export class SearchService {
         }
       })
     } catch (error: any) {
+      if (error instanceof SearchError) {
+        throw error
+      }
       if (error.message && error.message.includes('Location not found')) {
         throw new HttpError(400, error.message)
       }
