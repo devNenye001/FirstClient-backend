@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 
-export type CopyField = 'PHONE' | 'EMAIL'
+export type CopyField = 'PHONE' | 'EMAIL' | 'WEBSITE'
 export type ActivityType =
   | 'SEARCH'
   | 'BUSINESS_VIEW'
@@ -9,6 +9,7 @@ export type ActivityType =
   | 'BUSINESS_UNSAVE'
   | 'PHONE_COPY'
   | 'EMAIL_COPY'
+  | 'WEBSITE_COPY'
   | 'RECOMMENDATION'
 
 export class AnalyticsService {
@@ -23,7 +24,10 @@ export class AnalyticsService {
 
   static async copied(userId: string, businessId: string, copiedField: CopyField) {
     const event = await prisma.copyEvent.create({ data: { userId, businessId, copiedField } })
-    await this.activity(userId, copiedField === 'PHONE' ? 'PHONE_COPY' : 'EMAIL_COPY', { businessId })
+    let type: ActivityType = 'PHONE_COPY'
+    if (copiedField === 'EMAIL') type = 'EMAIL_COPY'
+    else if (copiedField === 'WEBSITE') type = 'WEBSITE_COPY'
+    await this.activity(userId, type, { businessId })
     return event
   }
 }

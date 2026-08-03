@@ -3,14 +3,102 @@ import { env } from '../../config/env.js'
 type SearchInput = { country: string; state?: string; city?: string; category?: string }
 
 function buildOverpassQuery(lat: number, lon: number, radius = 15000, category?: string) {
-  // If category is restaurants, target common amenity values
   let clause = ''
-  if (category && /restaurant|food|cafe|bar|pub|fast_food/i.test(category)) {
-    clause = `node["amenity"~"restaurant|cafe|fast_food|bar|pub"](around:${radius},${lat},${lon});`
-  } else if (category && /shop|store|retail/i.test(category)) {
-    clause = `node["shop"](around:${radius},${lat},${lon});`
+  if (category) {
+    const norm = category.toLowerCase().trim()
+    switch (norm) {
+      case 'restaurants':
+      case 'restaurant':
+        clause = `nwr["amenity"="restaurant"](around:${radius},${lat},${lon});`
+        break
+      case 'cafes':
+      case 'cafe':
+        clause = `nwr["amenity"="cafe"](around:${radius},${lat},${lon});`
+        break
+      case 'hotels':
+      case 'hotel':
+        clause = `nwr["tourism"="hotel"](around:${radius},${lat},${lon});`
+        break
+      case 'salons':
+      case 'salon':
+        clause = `nwr["shop"="hairdresser"](around:${radius},${lat},${lon});`
+        break
+      case 'barbershops':
+      case 'barbershop':
+        clause = `nwr["shop"="barber"](around:${radius},${lat},${lon});`
+        break
+      case 'bakeries':
+      case 'bakery':
+        clause = `nwr["shop"="bakery"](around:${radius},${lat},${lon});`
+        break
+      case 'pharmacies':
+      case 'pharmacy':
+        clause = `nwr["amenity"="pharmacy"](around:${radius},${lat},${lon});`
+        break
+      case 'schools':
+      case 'school':
+        clause = `nwr["amenity"="school"](around:${radius},${lat},${lon});`
+        break
+      case 'hospitals':
+      case 'hospital':
+        clause = `nwr["amenity"="hospital"](around:${radius},${lat},${lon});`
+        break
+      case 'gyms':
+      case 'gym':
+        clause = `nwr["leisure"="fitness_centre"](around:${radius},${lat},${lon});`
+        break
+      case 'real estate agencies':
+      case 'real estate':
+      case 'real-estate':
+        clause = `nwr["office"="estate_agent"](around:${radius},${lat},${lon});`
+        break
+      case 'supermarkets':
+      case 'supermarket':
+        clause = `nwr["shop"="supermarket"](around:${radius},${lat},${lon});`
+        break
+      case 'electronics stores':
+      case 'electronics':
+      case 'electronics-stores':
+        clause = `nwr["shop"="electronics"](around:${radius},${lat},${lon});`
+        break
+      case 'boutiques':
+      case 'boutique':
+        clause = `nwr["shop"="boutique"](around:${radius},${lat},${lon});`
+        break
+      case 'auto repair shops':
+      case 'auto-repair':
+      case 'auto repair':
+        clause = `nwr["shop"="car_repair"](around:${radius},${lat},${lon});`
+        break
+      case 'dentists':
+      case 'dentist':
+        clause = `nwr["amenity"="dentist"](around:${radius},${lat},${lon});`
+        break
+      case 'law firms':
+      case 'lawyer':
+      case 'law-firms':
+        clause = `nwr["office"="lawyer"](around:${radius},${lat},${lon});`
+        break
+      case 'accounting firms':
+      case 'accountant':
+      case 'accounting-firms':
+        clause = `nwr["office"="accountant"](around:${radius},${lat},${lon});`
+        break
+      case 'beauty spas':
+      case 'spa':
+      case 'beauty-spas':
+        clause = `nwr["amenity"="spa"](around:${radius},${lat},${lon}); nwr["shop"="beauty"](around:${radius},${lat},${lon});`
+        break
+      case 'pet stores':
+      case 'pet-stores':
+        clause = `nwr["shop"="pet"](around:${radius},${lat},${lon});`
+        break
+      default:
+        clause = `nwr["amenity"~"${norm}"](around:${radius},${lat},${lon}); nwr["shop"~"${norm}"](around:${radius},${lat},${lon});`
+        break
+    }
   } else {
-    clause = `node["amenity"](around:${radius},${lat},${lon}); node["shop"](around:${radius},${lat},${lon});`
+    clause = `nwr["amenity"](around:${radius},${lat},${lon}); nwr["shop"](around:${radius},${lat},${lon});`
   }
 
   return `
@@ -23,7 +111,14 @@ function buildOverpassQuery(lat: number, lon: number, radius = 15000, category?:
 }
 
 export class OverpassService {
+  private static geocodeCache = new Map<string, { lat: number; lon: number }>()
+
   static async geocode(input: SearchInput) {
+    const cacheKey = `${input.country}:${input.state || ''}:${input.city || ''}`.toLowerCase()
+    if (this.geocodeCache.has(cacheKey)) {
+      return this.geocodeCache.get(cacheKey)!
+    }
+
     const params = new URLSearchParams()
     params.set('format', 'json')
     params.set('limit', '1')
@@ -35,8 +130,12 @@ export class OverpassService {
     const res = await fetch(url, { headers: { 'User-Agent': env.NOMINATIM_USER_AGENT } })
     if (!res.ok) throw new Error(`Nominatim geocode failed: ${res.status}`)
     const data = await res.json()
-    if (!data || data.length === 0) throw new Error('Location not found')
-    return { lat: Number(data[0].lat), lon: Number(data[0].lon) }
+    if (!data || data.length === 0) {
+      throw new Error(`Location not found: ${input.city}, ${input.country}`)
+    }
+    const coords = { lat: Number(data[0].lat), lon: Number(data[0].lon) }
+    this.geocodeCache.set(cacheKey, coords)
+    return coords
   }
 
   static async queryOverpass(lat: number, lon: number, category?: string) {
@@ -52,13 +151,13 @@ export class OverpassService {
     const { lat, lon } = await this.geocode(input)
     const elements = await this.queryOverpass(lat, lon, input.category)
 
-    return elements
+    const results = elements
       .map((el: any) => {
         const tags = el.tags || {}
         return {
           googlePlaceId: `osm:${el.type}:${el.id}`,
           name: tags.name || 'Unnamed Business',
-          category: tags.amenity || tags.shop || 'Unknown',
+          category: tags.amenity || tags.shop || tags.tourism || tags.leisure || tags.office || tags.beauty || 'Unknown',
           address: [tags['addr:housenumber'], tags['addr:street'], tags['addr:city'], tags['addr:postcode']]
             .filter(Boolean)
             .join(' '),
@@ -76,5 +175,7 @@ export class OverpassService {
         }
       })
       .filter((b: any) => b.name && b.latitude && b.longitude)
+
+    return { lat, lon, results }
   }
 }

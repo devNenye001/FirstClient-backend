@@ -18,7 +18,19 @@ import { userRoutes } from './features/users/user.routes.js'
 export const app = express()
 
 app.use(helmet())
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }))
+const allowedOrigins = env.CORS_ORIGIN.split(',')
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'))
+      }
+    },
+    credentials: true
+  })
+)
 app.use(express.json({ limit: '1mb' }))
 app.use(compression())
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
